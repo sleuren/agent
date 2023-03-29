@@ -25,7 +25,7 @@ setuptools.setup(
     long_description=readme,
     url='https://github.com/sleuren/agent',
     author='sleuren',
-    author_email='360support@webpros.com',
+    author_email='hello@sleuren.com',
     maintainer='sleuren',
     maintainer_email='hello@sleuren.com',
     license='MIT',
