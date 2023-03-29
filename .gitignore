@@ -1,0 +1,10 @@
+*.pyc
+*~
+*.bak
+build
+debian
+dist
+README.html
+.idea/
+tmp
+sleuren.egg-info/
