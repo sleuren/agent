@@ -19,7 +19,7 @@ else:
 
 setuptools.setup(
     name='sleuren',
-    version='1.0.0',
+    version='1.0.1',
     description='Server monitoring agent',
     long_description_content_type='text/markdown',
     long_description=readme,
