@@ -68,7 +68,8 @@ jobs:
         repository_url: https://test.pypi.org/legacy/
         skip_existing: true
     - name: Publish distribution 📦 to PyPI
-      if: github.ref == 'refs/heads/main'
+      if: github.event_name == 'release'
       uses: pypa/gh-action-pypi-publish@master
       with:
         password: ${{ secrets.PYPI_API_TOKEN }}
+        skip_existing: true
