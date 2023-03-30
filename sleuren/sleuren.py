@@ -65,7 +65,7 @@ if os.name == 'nt':
 
 def info():
     '''
-    Return string with info about agent360:
+    Return string with info about sleuren:
         - version
         - plugins enabled
         - absolute path to plugin directory
@@ -121,7 +121,7 @@ def hello(proto='https'):
             }).encode("utf-8")
            ).read().decode()
 
-    if len(server_id) == 24:
+    if len(server_id) == 36:
         print('Got server_id: %s' % server_id)
         open(token_filename, 'w').\
             write('[DEFAULT]\nuser=%s\nserver=%s\n' % (user_id, server_id))
@@ -171,11 +171,20 @@ def test_plugins(plugins=[]):
 
         try:
             payload = module.Plugin().run(agent.config)
+            user_id = agent.config.get('agent', 'user')
+            server_id = agent.config.get('agent', 'server')
+            urlopen(
+                'https://' + agent.config.get('data', 'api_host') + '/agent',
+                data=urlencode({
+                    'user': user_id,
+                    'server': server_id,
+                    'plugin': plugin_name,
+                    'payload': payload,
+                }).encode("utf-8")
+            ).read().decode()
             print(json.dumps(payload, indent=4, sort_keys=True))
         except Exception as e:
             print('Execution error:', e)
-
-
 class Agent:
     execute = Queue()
     metrics = Queue()
