@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8; tab-width: 4; indent-tabs: nil; -*-
 from __future__ import print_function
 import bz2
 import sys
-
 if sys.version_info >= (3,):
     try:
         from past.builtins import basestring
@@ -34,7 +33,7 @@ import subprocess
 import threading
 import time
 import types
-from optparse import OptionParser
+import urllib
 
 try:
     from urllib.parse import urlparse, urlencode
@@ -45,7 +44,7 @@ except ImportError:
     from urllib import urlencode
     from urllib2 import urlopen, Request, HTTPError
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 __FILEABSDIRNAME__ = os.path.dirname(os.path.abspath(__file__))
 
 ini_files = (
@@ -57,10 +56,10 @@ ini_files = (
     os.path.abspath('sleuren-token.ini'),
 )
 
-if os.name == 'nt':
+if sys.platform == 'win32':
     ini_files = (
-        os.path.join(__FILEABSDIRNAME__, '..', 'config', 'sleuren.ini'),
-        os.path.join(__FILEABSDIRNAME__, '..', 'config', 'sleuren-token.ini'),
+        os.path.join(__FILEABSDIRNAME__, 'sleuren.ini'),
+        os.path.join(__FILEABSDIRNAME__, 'sleuren-token.ini'),
     )
 
 def info():
@@ -72,7 +71,7 @@ def info():
         - server id from configuration file
     '''
     agent = Agent(dry_instance=True)
-    plugins_path = agent._get_plugins_path()
+    plugins_path = agent.config.get('agent', 'plugins')
 
     plugins_enabled = agent._get_plugins(state='enabled')
 
@@ -81,28 +80,21 @@ def info():
         'Plugins enabled: %s' % ', '.join(plugins_enabled),
         'Plugins directory: %s' % plugins_path,
         'Server: %s' % agent.config.get('agent', 'server'),
+        'User: %s' % agent.config.get('agent', 'user'),
     ))
 
 
 def hello(proto='https'):
-    parser = OptionParser()
-    parser.add_option("-t", "--tags", help="Comma-separated list of tags")
-    (options, args) = parser.parse_args()
-
-    user_id = args[0]
+    user_id = sys.argv[1]
     agent = Agent(dry_instance=True)
-    if len(args) > 1:
-        token_filename = args[1]
+    if len(sys.argv) > 2:
+        token_filename = sys.argv[2]
     else:
         token_filename = os.path.join(__FILEABSDIRNAME__, 'sleuren-token.ini')
-    if len(args) > 2:
-        unique_id = args[2]
+    if len(sys.argv) > 3:
+        unique_id = sys.argv[3]
     else:
         unique_id = ''
-    if options.tags is None:
-        tags = ''
-    else:
-        tags = options.tags
     if '_' in user_id:
         server_id = user_id.split('_')[1]
         user_id = user_id.split('_')[0]
@@ -112,21 +104,24 @@ def hello(proto='https'):
         except AttributeError:
             hostname = socket.getfqdn()
         server_id = urlopen(
-            proto + '://' + agent.config.get('data', 'api_host') + '/hello',
+            proto + '://' + agent.config.get('data', 'api_host') + '/api/hello',
             data=urlencode({
                     'user': user_id,
                     'hostname': hostname,
-                    'unique_id': unique_id,
-                    'tags': tags,
+                    'unique_id': unique_id
             }).encode("utf-8")
            ).read().decode()
-
     if len(server_id) == 36:
         print('Got server_id: %s' % server_id)
         open(token_filename, 'w').\
             write('[DEFAULT]\nuser=%s\nserver=%s\n' % (user_id, server_id))
     else:
         print('Could not retrieve server_id: %s' % server_id)
+
+
+# def run_agent():
+#     Agent().run()
+
 
 def _plugin_name(plugin):
     if isinstance(plugin, basestring):
@@ -142,7 +137,7 @@ def test_plugins(plugins=[]):
     If plugins list is empty test all enabled plugins.
     '''
     agent = Agent(dry_instance=True)
-    plugins_path = agent._get_plugins_path()
+    plugins_path = agent.config.get('agent', 'plugins')
     if plugins_path not in sys.path:
         sys.path.insert(0, plugins_path)
 
@@ -171,20 +166,11 @@ def test_plugins(plugins=[]):
 
         try:
             payload = module.Plugin().run(agent.config)
-            user_id = agent.config.get('agent', 'user')
-            server_id = agent.config.get('agent', 'server')
-            urlopen(
-                'https://' + agent.config.get('data', 'api_host') + '/agent',
-                data=urlencode({
-                    'user': user_id,
-                    'server': server_id,
-                    'plugin': plugin_name,
-                    'payload': payload,
-                }).encode("utf-8")
-            ).read().decode()
             print(json.dumps(payload, indent=4, sort_keys=True))
         except Exception as e:
             print('Execution error:', e)
+
+
 class Agent:
     execute = Queue()
     metrics = Queue()
@@ -209,13 +195,6 @@ class Agent:
         self._data_worker_init()
         self._dump_config()
 
-    def _get_plugins_path(self):
-        if os.name == 'nt':
-            return os.path.expandvars(self.config.get('agent', 'plugins'))
-        else:
-            return self.config.get('agent', 'plugins')
-
-
     def _config_init(self):
         '''
         Initialize configuration object
@@ -232,8 +211,8 @@ class Agent:
             'subprocess': 'no',
             'user': '',
             'server': '',
-            'api_host': 'sleuren.com/api',
-            'api_path': '/agent',
+            'api_host': 'api.sleuren.com',
+            'api_path': '/api/agent',
             'log_file': '/var/log/sleuren.log',
             'log_file_mode': 'a',
             'max_cached_collections': 10,
@@ -270,10 +249,7 @@ class Agent:
         '''
         level = self.config.getint('agent', 'logging_level')
 
-        if os.name == 'nt':
-            log_file = os.path.expandvars(self.config.get('agent', 'log_file'))
-        else:
-            log_file = self.config.get('agent', 'log_file')
+        log_file = self.config.get('agent', 'log_file')
 
         log_file_mode = self.config.get('agent', 'log_file_mode')
         if log_file_mode in ('w', 'a'):
@@ -302,7 +278,7 @@ class Agent:
         Discover the plugins
         '''
         logging.info('_plugins_init')
-        plugins_path = self._get_plugins_path()
+        plugins_path = self.config.get('agent', 'plugins')
         filenames = glob.glob(os.path.join(plugins_path, '*.py'))
         if plugins_path not in sys.path:
             sys.path.insert(0, plugins_path)
@@ -424,12 +400,7 @@ class Agent:
         max_cached_collections = self.config.get('agent', 'max_cached_collections')
         cached_collections = []
         collection = []
-        initial_data = True
         while True:
-            if initial_data:
-                max_span = 10
-            else:
-                max_span = self.config.getint('agent', 'max_data_span')
             loop_ts = time.time()
             if self.shutdown:
                 logging.info('%s:shutdown', threading.currentThread())
@@ -455,10 +426,9 @@ class Agent:
                     send = True
                     clean = True
                 if send:
-                    initial_data = False
                     headers = {
                         "Content-type": "application/json",
-                        #"Authorization": "ApiKey %s:%s" % (user, server),
+                        "Authorization": "ApiKey %s:%s" % (user, server),
                     }
                     logging.debug('collection: %s',
                         json.dumps(collection, indent=2, sort_keys=True))
@@ -491,7 +461,7 @@ class Agent:
 
                             # Send recent collection (reuse existing connection)
                             connection.request('PUT', '%s?version=%s' % (api_path, __version__),
-                                    bz2.compress(str(json.dumps(collection)+"\n").encode()),
+                                   bz2.compress(str(json.dumps(collection) + "\n").encode()),
                                     headers=headers)
                             response = connection.getresponse()
                             response.read()
@@ -544,7 +514,7 @@ class Agent:
         '''
         Return list with plugins names
         '''
-        plugins_path = self._get_plugins_path()
+        plugins_path = self.config.get('agent', 'plugins')
         plugins = []
         for filename in glob.glob(os.path.join(plugins_path, '*.py')):
             plugin_name = _plugin_name(filename)
@@ -656,7 +626,6 @@ class Agent:
                     thread.join(interval)
         except Exception as e:
             logging.error('Worker error: %s' % e)
-
 
 def main():
     if len(sys.argv) > 1:

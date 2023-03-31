@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 import os
 import sys
 import setuptools
@@ -19,7 +18,7 @@ else:
 
 setuptools.setup(
     name='sleuren',
-    version='1.0.2',
+    version='1.0.3',
     description='Server monitoring agent',
     long_description_content_type='text/markdown',
     long_description=readme,
