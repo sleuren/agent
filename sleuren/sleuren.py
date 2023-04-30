@@ -3,6 +3,7 @@
 from __future__ import print_function
 import bz2
 import sys
+
 if sys.version_info >= (3,):
     try:
         from past.builtins import basestring
@@ -20,6 +21,7 @@ else:
 
 import glob
 import imp
+
 try:
     import json
 except ImportError:
@@ -44,7 +46,7 @@ except ImportError:
     from urllib import urlencode
     from urllib2 import urlopen, Request, HTTPError
 
-__version__ = '1.0.4'
+__version__ = '1.0.5'
 __FILEABSDIRNAME__ = os.path.dirname(os.path.abspath(__file__))
 
 ini_files = (
@@ -61,6 +63,7 @@ if sys.platform == 'win32':
         os.path.join(__FILEABSDIRNAME__, 'sleuren.ini'),
         os.path.join(__FILEABSDIRNAME__, 'sleuren-token.ini'),
     )
+
 
 def info():
     '''
@@ -80,12 +83,12 @@ def info():
         'Plugins enabled: %s' % ', '.join(plugins_enabled),
         'Plugins directory: %s' % plugins_path,
         'Server: %s' % agent.config.get('agent', 'server'),
-        'User: %s' % agent.config.get('agent', 'user'),
+        'User: %s' % agent.config.get('agent', 'project'),
     ))
 
 
 def hello(proto='https'):
-    user_id = sys.argv[1]
+    project = sys.argv[1]
     agent = Agent(dry_instance=True)
     if len(sys.argv) > 2:
         token_filename = sys.argv[2]
@@ -95,26 +98,26 @@ def hello(proto='https'):
         unique_id = sys.argv[3]
     else:
         unique_id = ''
-    if '_' in user_id:
-        server_id = user_id.split('_')[1]
-        user_id = user_id.split('_')[0]
+    if '_' in project:
+        server_id = project.split('_')[1]
+        project = project.split('_')[0]
     else:
         try:
             hostname = os.uname()[1]
         except AttributeError:
             hostname = socket.getfqdn()
         server_id = urlopen(
-            proto + '://' + agent.config.get('data', 'api_host') + '/api/hello',
+            proto + '://' + agent.config.get('data', 'api_host') + '/hello',
             data=urlencode({
-                    'user': user_id,
-                    'hostname': hostname,
-                    'unique_id': unique_id
+                'project': project,
+                'hostname': hostname,
+                'unique_id': unique_id
             }).encode("utf-8")
-           ).read().decode()
+        ).read().decode()
     if len(server_id) == 36:
         print('Got server_id: %s' % server_id)
-        open(token_filename, 'w').\
-            write('[DEFAULT]\nuser=%s\nserver=%s\n' % (user_id, server_id))
+        open(token_filename, 'w'). \
+            write('[DEFAULT]\nproject=%s\nserver=%s\n' % (project, server_id))
     else:
         print('Could not retrieve server_id: %s' % server_id)
 
@@ -209,10 +212,10 @@ class Agent:
             'plugins': os.path.join(__FILEABSDIRNAME__, 'plugins'),
             'enabled': 'no',
             'subprocess': 'no',
-            'user': '',
+            'project': '',
             'server': '',
-            'api_host': 'api.sleuren.com',
-            'api_path': '/api/agent',
+            'api_host': 'agent.sleuren.com',
+            'api_path': '/events',
             'log_file': '/var/log/sleuren.log',
             'log_file_mode': 'a',
             'max_cached_collections': 10,
@@ -265,7 +268,8 @@ class Agent:
             logging.basicConfig(level=level)  # Log to sys.stderr by default
         else:
             try:
-                logging.basicConfig(filename=log_file, filemode=log_file_mode, level=level, format="%(asctime)-15s  %(levelname)s    %(message)s")
+                logging.basicConfig(filename=log_file, filemode=log_file_mode, level=level,
+                                    format="%(asctime)-15s  %(levelname)s    %(message)s")
             except IOError as e:
                 logging.basicConfig(level=level)
                 logging.info('IOError: %s', e)
@@ -312,8 +316,8 @@ class Agent:
         Execute /task/ in a subprocess
         '''
         process = subprocess.Popen((sys.executable, task),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            universal_newlines=True)
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   universal_newlines=True)
         logging.debug('%s:process:%i', threading.currentThread(), process.pid)
         interval = self.config.getint('execution', 'interval')
         name = _plugin_name(task)
@@ -331,7 +335,7 @@ class Agent:
         stdout, stderr = process.communicate()
         if process.returncode != 0 or stderr:
             logging.error('%s:%s:%s:%s', threading.currentThread(),
-                task, process.returncode, stderr)
+                          task, process.returncode, stderr)
         if stdout:
             ret = pickle.loads(stdout)
         else:
@@ -384,7 +388,6 @@ class Agent:
         self.cemetery.put(threading.currentThread())
         self.hire.release()
 
-
     def _data(self):
         '''
         Take and collect data, send and clean if needed
@@ -395,7 +398,7 @@ class Agent:
         max_age = self.config.getint('agent', 'max_data_age')
         max_span = self.config.getint('agent', 'max_data_span')
         server = self.config.get('agent', 'server')
-        user = self.config.get('agent', 'user')
+        project = self.config.get('agent', 'project')
         interval = self.config.getint('data', 'interval')
         max_cached_collections = self.config.get('agent', 'max_cached_collections')
         cached_collections = []
@@ -406,7 +409,7 @@ class Agent:
                 logging.info('%s:shutdown', threading.currentThread())
                 break
             logging.debug('%s:data_queue:%i:collection:%i',
-                threading.currentThread(), self.data.qsize(), len(collection))
+                          threading.currentThread(), self.data.qsize(), len(collection))
             while self.data.qsize():
                 try:
                     collection.append(self.data.get_nowait())
@@ -428,12 +431,12 @@ class Agent:
                 if send:
                     headers = {
                         "Content-type": "application/json",
-                        "Authorization": "ApiKey %s:%s" % (user, server),
+                        "Authorization": "ApiKey %s:%s" % (project, server),
                     }
                     logging.debug('collection: %s',
-                        json.dumps(collection, indent=2, sort_keys=True))
-                    if not (server and user):
-                        logging.warning('Empty server or user, nowhere to send.')
+                                  json.dumps(collection, indent=2, sort_keys=True))
+                    if not (server and project):
+                        logging.warning('Empty server or project, nowhere to send.')
                         clean = True
                     else:
 
@@ -448,8 +451,8 @@ class Agent:
                                 logging.info('Sending cached collections: %i', len(cached_collections))
                                 while cached_collections:
                                     connection.request('PUT', '%s?version=%s' % (api_path, __version__),
-                                            cached_collections[0],
-                                            headers=headers)
+                                                       cached_collections[0],
+                                                       headers=headers)
                                     response = connection.getresponse()
                                     response.read()
                                     if response.status == 200:
@@ -461,8 +464,8 @@ class Agent:
 
                             # Send recent collection (reuse existing connection)
                             connection.request('PUT', '%s?version=%s' % (api_path, __version__),
-                                   bz2.compress(str(json.dumps(collection) + "\n").encode()),
-                                    headers=headers)
+                                               bz2.compress(str(json.dumps(collection) + "\n").encode()),
+                                               headers=headers)
                             response = connection.getresponse()
                             response.read()
 
@@ -479,9 +482,9 @@ class Agent:
                                 if len(cached_collections) >= max_cached_collections:
                                     del cached_collections[0]  # Remove oldest collection
                                     logging.info('Reach max_cached_collections (%s): oldest cached collection dropped',
-                                        max_cached_collections)
+                                                 max_cached_collections)
                                 logging.info('Cache current collection to resend next time')
-                                cached_collections.append(bz2.compress(str(json.dumps(collection)+"\n").encode()))
+                                cached_collections.append(bz2.compress(str(json.dumps(collection) + "\n").encode()))
                                 collection = []
                         finally:
                             connection.close()
@@ -531,7 +534,6 @@ class Agent:
 
         return plugins
 
-
     def _rip(self):
         '''
         Join with dead workers
@@ -545,7 +547,6 @@ class Agent:
                 break
             logging.debug('joining:%s', thread)
             thread.join()
-
 
     def run(self):
         '''
@@ -596,7 +597,7 @@ class Agent:
                                 'threads_capping':
                                     self.config.getint('execution', 'threads')}
                         })
-                sleep_interval = .5-(time.time()-now)
+                sleep_interval = .5 - (time.time() - now)
                 if sleep_interval > 0:
                     time.sleep(sleep_interval)
                 else:
@@ -614,7 +615,7 @@ class Agent:
                 wait_for = [
                     thread for thread in all_threads
                     if not thread.isDaemon() and
-                    not isinstance(thread, threading._MainThread)
+                       not isinstance(thread, threading._MainThread)
                 ]
                 if not wait_for:
                     logging.info('Bye!')
@@ -626,6 +627,7 @@ class Agent:
                     thread.join(interval)
         except Exception as e:
             logging.error('Worker error: %s' % e)
+
 
 def main():
     if len(sys.argv) > 1:
