@@ -46,7 +46,7 @@ except ImportError:
     from urllib import urlencode
     from urllib2 import urlopen, Request, HTTPError
 
-__version__ = '1.0.5'
+__version__ = '1.0.6'
 __FILEABSDIRNAME__ = os.path.dirname(os.path.abspath(__file__))
 
 ini_files = (
@@ -83,7 +83,7 @@ def info():
         'Plugins enabled: %s' % ', '.join(plugins_enabled),
         'Plugins directory: %s' % plugins_path,
         'Server: %s' % agent.config.get('agent', 'server'),
-        'User: %s' % agent.config.get('agent', 'project'),
+        'Project: %s' % agent.config.get('agent', 'project'),
     ))
 
 
@@ -114,17 +114,12 @@ def hello(proto='https'):
                 'unique_id': unique_id
             }).encode("utf-8")
         ).read().decode()
-    if len(server_id) == 36:
+    if server_id:
         print('Got server_id: %s' % server_id)
         open(token_filename, 'w'). \
             write('[DEFAULT]\nproject=%s\nserver=%s\n' % (project, server_id))
     else:
-        print('Could not retrieve server_id: %s' % server_id)
-
-
-# def run_agent():
-#     Agent().run()
-
+        print('Could not retrieve server_id, check your project token and try again.')
 
 def _plugin_name(plugin):
     if isinstance(plugin, basestring):
@@ -656,7 +651,6 @@ def main():
         elif sys.argv[1] == 'test':
             sys.exit(test_plugins(sys.argv[2:]))
         else:
-
             print('Invalid option:', sys.argv[1], file=sys.stderr)
             sys.exit(1)
     else:
