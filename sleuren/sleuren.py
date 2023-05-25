@@ -87,6 +87,16 @@ def info():
     ))
 
 
+def upgrade():
+    '''
+    Upgrade sleuren to latest version
+    pip3 install --upgrade sleuren
+    '''
+    print('current version: %s' % __version__)
+
+    print('Upgrading sleuren to latest version...')
+    subprocess.call(['pip3', 'install', '--upgrade', 'sleuren'])
+
 def hello(proto='https'):
     project = sys.argv[1]
     agent = Agent(dry_instance=True)
@@ -642,6 +652,9 @@ def main():
         elif sys.argv[1] == 'version':
             print(__version__)
             sys.exit()
+        elif sys.argv[1] == 'upgrade':
+            del sys.argv[1]
+            sys.exit(upgrade())
         elif sys.argv[1] == 'hello':
             del sys.argv[1]
             sys.exit(hello())

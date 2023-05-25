@@ -17,11 +17,13 @@ class Plugin(plugins.BasePlugin):
             return "/var/cpanel/users does not exist"
         data = os.popen('for user in `/bin/ls -A /var/cpanel/users/` ; do du -sc /home/$user ;done | grep -v \'total\|system\|nobody\' | cut -d"/" -f1,3 | sort -nrk 1,1').read()
         results = {}
+
         i=0
+
         try:
             for line in data.splitlines():
                 i = i + 1
-                if i > 50:
+                if i > 150:
                     break
                 results[line.split("\t")[1].strip("/")] = {"bytes": int(line.split("\t")[0])}
         except Exception:
