@@ -59,6 +59,7 @@ def collect_ping(hostname):
             minping, avgping, maxping, jitter = matched
             response = avgping
     elif sys.platform == "win32":
+        #response = 0
         response = -1
         try:
             ping = Popen(["ping", "-n", "1 ", hostname], stdout=PIPE, stderr=PIPE)
@@ -72,6 +73,12 @@ def collect_ping(hostname):
                 response = -1
         except CalledProcessError:
             pass
+        if response == -1:
+            try:
+                rxresponse = re.findall(br" + .+ = [0-9]{1,9}ms, .+ = [0-9]{1,9}ms, .+ = (\d+){1,9}ms", out)
+                response = rxresponse[0].decode()
+            except Exception:
+                pass
     else:
         response = -1
     return {'avgping': response, 'host': hostname}
